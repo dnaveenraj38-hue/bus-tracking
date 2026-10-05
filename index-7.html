@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bus Tracking</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f4f7fb;color:#172033}
+.header{background:linear-gradient(135deg,#0878e8,#168cf5);color:#fff;padding:28px 22px 30px;border-radius:0 0 35px 35px}
+.header h1{margin:0 0 6px;font-size:30px}.header p{margin:0;font-size:17px}
+.wrap{padding:20px}.panel{background:#fff;border-radius:25px;padding:20px;box-shadow:0 5px 18px #00000012;margin-bottom:18px}
+label{display:block;font-weight:bold;margin:10px 0 6px}
+input,select,button{width:100%;padding:13px;border-radius:12px;border:1px solid #d6dce5;font-size:16px}
+button{border:0;background:#0878e8;color:#fff;font-weight:bold;margin-top:12px}
+#map{height:500px;border-radius:22px;overflow:hidden}
+.status{margin-top:12px;padding:12px;border-radius:12px;background:#eef6ff}
+.hidden{display:none}
+.bottom{position:fixed;bottom:0;left:0;right:0;height:70px;background:#fff;display:flex;justify-content:space-around;align-items:center;box-shadow:0 -3px 12px #0002}
+.bottom div{text-align:center;font-size:13px}.bottom b{font-size:25px;display:block}
+body{padding-bottom:80px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🚌 Bus Tracking</h1>
+  <p>Live bus location</p>
+</div>
+
+<div class="wrap">
+
+  <div class="panel">
+    <h2>Login</h2>
+    <label>Role</label>
+    <select id="role">
+      <option value="driver">Driver / Conductor</option>
+      <option value="passenger">Passenger</option>
+    </select>
+
+    <label>Bus Name</label>
+    <input id="busName" placeholder="Example: DDJB">
+
+    <label>Bus Number</label>
+    <input id="busNumber" placeholder="Example: 30A">
+
+    <button onclick="saveDetails()">Save Bus</button>
+    <button onclick="startGPS()">📍 GPS ON / Track</button>
+
+    <div class="status" id="status">Ready</div>
+  </div>
+
+  <div class="panel">
+    <h2>🗺️ Real Bus Map</h2>
+    <div id="map"></div>
+  </div>
+
+</div>
+
+<div class="bottom">
+  <div><b>⌂</b>Home</div>
+  <div><b>🚌</b>Bus</div>
+  <div><b>⚙</b>Settings</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const savedName=localStorage.getItem("busName");
+const savedNumber=localStorage.getItem("busNumber");
+if(savedName) document.getElementById("busName").value=savedName;
+if(savedNumber) document.getElementById("busNumber").value=savedNumber;
+
+const map=L.map("map").setView([11.0168,76.9558],12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  maxZoom:19,attribution:"© OpenStreetMap contributors"
+}).addTo(map);
+
+let marker=null;
+
+function saveDetails(){
+  const name=document.getElementById("busName").value.trim();
+  const number=document.getElementById("busNumber").value.trim();
+  if(!name||!number){alert("Bus Name and Bus Number enter pannunga");return;}
+  localStorage.setItem("busName",name);
+  localStorage.setItem("busNumber",number);
+  document.getElementById("status").innerText="Saved: "+name+" - "+number;
+}
+
+function startGPS(){
+  if(!navigator.geolocation){
+    document.getElementById("status").innerText="GPS not supported";
+    return;
+  }
+
+  const name=localStorage.getItem("busName")||document.getElementById("busName").value||"DDJB";
+  const number=localStorage.getItem("busNumber")||document.getElementById("busNumber").value||"30A";
+
+  navigator.geolocation.watchPosition(pos=>{
+    const lat=pos.coords.latitude, lng=pos.coords.longitude;
+
+    if(!marker){
+      marker=L.marker([lat,lng]).addTo(map);
+    }else{
+      marker.setLatLng([lat,lng]);
+    }
+
+    marker.bindPopup("🚌 "+name+"<br>Bus No: "+number+"<br>GPS Live");
+    map.setView([lat,lng],16);
+    document.getElementById("status").innerText="🟢 "+name+" GPS LIVE";
+  },err=>{
+    document.getElementById("status").innerText="GPS permission/location ON pannunga";
+  },{
+    enableHighAccuracy:true,maximumAge:2000,timeout:10000
+  });
+}
+</script>
+</body>
+</html>
