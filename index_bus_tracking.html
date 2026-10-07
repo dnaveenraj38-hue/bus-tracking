@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Bus Tracking Live</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#eef5ff;color:#172033}
+.header{background:#087ee8;color:#fff;padding:18px;text-align:center;font-size:23px;font-weight:bold}
+.screen{display:none;padding:16px}.screen.active{display:block}
+.card{background:#fff;padding:18px;border-radius:18px;margin-bottom:16px;box-shadow:0 4px 16px #0002}
+h2{margin:0 0 15px}
+label{display:block;font-weight:bold;margin:12px 0 6px}
+input{width:100%;padding:14px;border:1px solid #cbd5e1;border-radius:12px;font-size:16px}
+button{width:100%;padding:16px;border:0;border-radius:14px;margin-top:12px;font-size:17px;font-weight:bold}
+.blue{background:#087ee8;color:#fff}
+.green{background:#10a65a;color:#fff}
+.red{background:#e53935;color:#fff}
+.gray{background:#687586;color:#fff}
+.status,.info{background:#f3f7fb;padding:12px;border-radius:12px;margin-top:12px;line-height:1.6}
+#map{position:fixed;top:65px;left:0;right:0;bottom:0;z-index:5;display:none}
+#mapbar{position:fixed;top:0;left:0;right:0;height:65px;background:#fff;z-index:10;display:none;align-items:center;padding:8px 10px;box-shadow:0 2px 8px #0002}
+#mapbar button{width:auto;margin:0;padding:10px 14px;background:#687586;color:#fff}
+#maptitle{font-size:19px;font-weight:bold;margin-left:10px;white-space:nowrap;overflow:hidden}
+.busLabel{background:#087ee8;color:#fff;border:2px solid #fff;border-radius:7px;padding:5px 8px;font-weight:bold;white-space:nowrap;box-shadow:0 2px 7px #0005}
+.busLabel:before{content:"🚌 "}
+.liveDot{color:#0a9b4b;font-weight:bold}
+.busItem{border:1px solid #d8e1ec;border-radius:13px;padding:12px;margin-top:10px}
+</style>
+</head>
+
+<body>
+
+<div class="header">🚌 BUS TRACKING</div>
+
+<!-- HOME -->
+<section id="home" class="screen active">
+  <div class="card">
+    <button class="blue" onclick="openDriver()">🚌 Driver / Conductor</button>
+    <button class="green" onclick="openPassengerLogin()">👤 Passenger</button>
+  </div>
+</section>
+
+<!-- DRIVER -->
+<section id="driver" class="screen">
+  <div class="card">
+    <h2>🚌 Driver / Conductor</h2>
+
+    <label>Bus Name</label>
+    <input id="busName" placeholder="77A Via Ondipudur">
+
+    <label>Bus Number</label>
+    <input id="busNumber" placeholder="77A">
+
+    <label>Bus Board Number</label>
+    <input id="busBoard" placeholder="TN99 AB12">
+
+    <button class="green" onclick="saveBus()">💾 SAVE & START LIVE LOCATION</button>
+    <button class="gray" onclick="goHome()">⬅ BACK</button>
+
+    <div id="driverMessage" class="status">
+      Bus details save pannitu current GPS location live-a update aagum.
+    </div>
+  </div>
+</section>
+
+<!-- DRIVER LIVE -->
+<section id="driverLive" class="screen">
+  <div class="card">
+    <h2>📍 Location Live</h2>
+    <div id="driverBusInfo" class="info"></div>
+    <div id="driverGpsStatus" class="status">GPS permission waiting...</div>
+    <button class="red" onclick="stopDriver()">⛔ STOP LIVE</button>
+    <button class="gray" onclick="openDriver()">⬅ BACK</button>
+  </div>
+</section>
+
+<!-- PASSENGER LOGIN -->
+<section id="passengerLogin" class="screen">
+  <div class="card">
+    <h2>👤 Passenger</h2>
+    <p>Login pannina created buses map-la live-a theriyum.</p>
+    <button class="blue" onclick="passengerLogin()">🔐 LOGIN & OPEN LIVE MAP</button>
+    <button class="gray" onclick="goHome()">⬅ BACK</button>
+  </div>
+</section>
+
+<!-- MAP -->
+<div id="mapbar">
+  <button onclick="closeMap()">⬅ BACK</button>
+  <div id="maptitle">🗺️ Live Bus Map</div>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!--
+  FIREBASE:
+  1. Create Firebase project
+  2. Enable Realtime Database
+  3. Create Web App
+  4. Paste your config below
+-->
+<script type="module">
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+
+import {
+  getDatabase, ref, set, update, onValue
+}
+from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "PASTE_API_KEY",
+  authDomain: "PASTE_PROJECT_ID.firebaseapp.com",
+  databaseURL: "https://PASTE_PROJECT_ID-default-rtdb.firebaseio.com",
+  projectId: "PASTE_PROJECT_ID",
+  storageBucket: "PASTE_PROJECT_ID.firebasestorage.app",
+  messagingSenderId: "PASTE_SENDER_ID",
+  appId: "PASTE_APP_ID"
+};
+
+let ready=false;
+let db=null;
+
+try{
+  if(!firebaseConfig.apiKey.startsWith("PASTE_")){
+    const app=initializeApp(firebaseConfig);
+    db=getDatabase(app);
+    ready=true;
+  }
+}catch(e){
+  console.log(e);
+}
+
+window.firebaseReady=()=>ready;
+window.firebaseDB=()=>db;
+window.firebaseRef=ref;
+window.firebaseSet=set;
+window.firebaseUpdate=update;
+window.firebaseOnValue=onValue;
+
+window.dispatchEvent(new Event("firebase-ready"));
+</script>
+
+<script>
+const LOCAL_KEY="bus_tracking_saved_bus";
+
+let activeBus=null;
+let driverWatch=null;
+let map=null;
+let driverMarker=null;
+let passengerMarker=null;
+let busMarkers={};
+let firebaseListening=false;
+
+function el(id){return document.getElementById(id)}
+
+function show(id){
+  document.querySelectorAll(".screen").forEach(x=>x.classList.remove("active"));
+  el(id).classList.add("active");
+  el("map").style.display="none";
+  el("mapbar").style.display="none";
+}
+
+function goHome(){
+  stopDriverGPS();
+  activeBus=null;
+  closeMap();
+  show("home");
+}
+
+function openDriver(){
+  stopDriverGPS();
+  show("driver");
+}
+
+function openPassengerLogin(){
+  stopDriverGPS();
+  show("passengerLogin");
+}
+
+function saveBus(){
+  const name=el("busName").value.trim();
+  const number=el("busNumber").value.trim();
+  const board=el("busBoard").value.trim();
+
+  if(!name||!number||!board){
+    alert("Bus Name, Bus Number, Bus Board Number fill pannunga.");
+    return;
+  }
+
+  if(!navigator.geolocation){
+    alert("Indha phone/browser GPS support panna maatenguthu.");
+    return;
+  }
+
+  activeBus={
+    id:"bus_"+Date.now(),
+    name:name,
+    number:number,
+    board:board,
+    lat:0,
+    lng:0,
+    gps:false,
+    updatedAt:Date.now()
+  };
+
+  localStorage.setItem(LOCAL_KEY,JSON.stringify(activeBus));
+
+  el("driverBusInfo").innerHTML=
+    "<b>🚌 Bus Name:</b> "+esc(name)+"<br>"+
+    "<b>Bus Number:</b> "+esc(number)+"<br>"+
+    "<b>Board Number:</b> "+esc(board);
+
+  show("driverLive");
+
+  startDriverGPS();
+}
+
+function startDriverGPS(){
+  if(!activeBus)return;
+
+  if(driverWatch!==null){
+    navigator.geolocation.clearWatch(driverWatch);
+  }
+
+  el("driverGpsStatus").textContent="📍 GPS permission asking...";
+
+  driverWatch=navigator.geolocation.watchPosition(
+    function(pos){
+      activeBus.lat=pos.coords.latitude;
+      activeBus.lng=pos.coords.longitude;
+      activeBus.accuracy=pos.coords.accuracy;
+      activeBus.gps=true;
+      activeBus.updatedAt=Date.now();
+
+      localStorage.setItem(LOCAL_KEY,JSON.stringify(activeBus));
+
+      el("driverGpsStatus").innerHTML=
+        "<span class='liveDot'>🟢 LOCATION LIVE</span><br>"+
+        "Latitude: "+activeBus.lat.toFixed(6)+"<br>"+
+        "Longitude: "+activeBus.lng.toFixed(6)+"<br>"+
+        "Accuracy: "+Math.round(activeBus.accuracy)+" m<br>"+
+        "<b>Passenger map-la indha bus live-a move aagum.</b>";
+
+      if(window.firebaseReady()){
+        const r=window.firebaseRef(
+          window.firebaseDB(),"buses/"+activeBus.id
+        );
+
+        window.firebaseSet(r,activeBus);
+      }
+
+      showDriverLiveMapMarker();
+    },
+    function(err){
+      el("driverGpsStatus").textContent=gpsError(err);
+    },
+    {
+      enableHighAccuracy:true,
+      maximumAge:1000,
+      timeout:15000
+    }
+  );
+}
+
+function showDriverLiveMapMarker(){
+  if(!activeBus||!activeBus.lat||!activeBus.lng)return;
+
+  if(!map){
+    initMap();
+  }
+
+  if(!driverMarker){
+    driverMarker=L.marker(
+      [activeBus.lat,activeBus.lng]
+    ).addTo(map).bindPopup("🚌 "+activeBus.name);
+  }else{
+    driverMarker.setLatLng([activeBus.lat,activeBus.lng]);
+  }
+}
+
+function stopDriver(){
+  if(activeBus&&window.firebaseReady()){
+    window.firebaseUpdate(
+      window.firebaseRef(window.firebaseDB(),"buses/"+activeBus.id),
+      {gps:false,updatedAt:Date.now()}
+    );
+  }
+
+  stopDriverGPS();
+
+  if(activeBus){
+    activeBus.gps=false;
+    localStorage.setItem(LOCAL_KEY,JSON.stringify(activeBus));
+  }
+
+  activeBus=null;
+  show("driver");
+}
+
+function stopDriverGPS(){
+  if(driverWatch!==null){
+    navigator.geolocation.clearWatch(driverWatch);
+    driverWatch=null;
+  }
+}
+
+function passengerLogin(){
+  show("home");
+  el("map").style.display="block";
+  el("mapbar").style.display="flex";
+
+  initMap();
+
+  if(window.firebaseReady()){
+    listenFirebaseBuses();
+  }else{
+    loadLocalBus();
+    setMapStatus("Firebase config add pannina different phone-la live bus varum.");
+  }
+
+  getPassengerGPS();
+}
+
+function initMap(){
+  if(map)return;
+
+  map=L.map("map").setView([11.0168,76.9558],13);
+
+  L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+      maxZoom:19,
+      attribution:"© OpenStreetMap contributors"
+    }
+  ).addTo(map);
+}
+
+function getPassengerGPS(){
+  if(!navigator.geolocation){
+    setMapStatus("Passenger GPS not supported.");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      const lat=pos.coords.latitude;
+      const lng=pos.coords.longitude;
+
+      if(!passengerMarker){
+        passengerMarker=L.circleMarker(
+          [lat,lng],
+          {
+            radius:9,
+            color:"#111",
+            fillColor:"#fff",
+            fillOpacity:1,
+            weight:3
+          }
+        ).addTo(map).bindPopup("👤 Passenger location");
+      }else{
+        passengerMarker.setLatLng([lat,lng]);
+      }
+
+      map.setView([lat,lng],14);
+      setMapStatus("📍 Passenger GPS ON");
+    },
+    function(err){
+      setMapStatus(gpsError(err));
+    },
+    {
+      enableHighAccuracy:true,
+      timeout:15000,
+      maximumAge:5000
+    }
+  );
+}
+
+function listenFirebaseBuses(){
+  if(firebaseListening)return;
+  firebaseListening=true;
+
+  window.firebaseOnValue(
+    window.firebaseRef(window.firebaseDB(),"buses"),
+    function(snapshot){
+      const buses=snapshot.val()||{};
+      renderBuses(Object.values(buses));
+    }
+  );
+}
+
+function loadLocalBus(){
+  try{
+    const raw=localStorage.getItem(LOCAL_KEY);
+    if(raw){
+      renderBuses([JSON.parse(raw)]);
+    }
+  }catch(e){}
+}
+
+function renderBuses(buses){
+  if(!map)return;
+
+  const current={};
+
+  buses.forEach(bus=>{
+    if(!bus||!bus.lat||!bus.lng)return;
+
+    // stopped real buses are hidden
+    if(bus.gps===false && !bus.demo)return;
+
+    current[bus.id]=true;
+
+    const icon=L.divIcon({
+      className:"",
+      html:"<div class='busLabel'>"+esc(bus.name)+"</div>",
+      iconAnchor:[12,15]
+    });
+
+    if(!busMarkers[bus.id]){
+      busMarkers[bus.id]=L.marker(
+        [bus.lat,bus.lng],
+        {icon:icon}
+      ).addTo(map);
+
+      busMarkers[bus.id].bindPopup(busPopup(bus));
+    }else{
+      busMarkers[bus.id].setLatLng([bus.lat,bus.lng]);
+      busMarkers[bus.id].setIcon(icon);
+      busMarkers[bus.id].getPopup().setContent(busPopup(bus));
+    }
+  });
+
+  Object.keys(busMarkers).forEach(id=>{
+    if(!current[id]){
+      map.removeLayer(busMarkers[id]);
+      delete busMarkers[id];
+    }
+  });
+}
+
+function busPopup(bus){
+  return "<b>🚌 "+esc(bus.name)+"</b><br>"+
+    "Bus Number: "+esc(bus.number)+"<br>"+
+    "Board Number: "+esc(bus.board)+"<br>"+
+    "GPS: 🟢 LIVE";
+}
+
+function setMapStatus(message){
+  if(!map)return;
+
+  if(!window.mapStatusControl){
+    window.mapStatusControl=L.control({position:"bottomleft"});
+
+    window.mapStatusControl.onAdd=function(){
+      const d=L.DomUtil.create("div");
+      d.id="mapStatus";
+      d.style.cssText=
+        "background:white;padding:8px 10px;border-radius:10px;"+
+        "box-shadow:0 2px 8px #0003;font-size:13px";
+      return d;
+    };
+
+    window.mapStatusControl.addTo(map);
+  }
+
+  el("mapStatus").textContent=message;
+}
+
+function closeMap(){
+  el("map").style.display="none";
+  el("mapbar").style.display="none";
+}
+
+function gpsError(err){
+  if(err.code===1)return"❌ Location permission denied. Allow Location.";
+  if(err.code===2)return"❌ GPS/Location OFF. Turn ON Location.";
+  if(err.code===3)return"❌ GPS timeout. Try again.";
+  return"❌ GPS location error.";
+}
+
+function esc(v){
+  return String(v??"").replace(/[&<>"']/g,m=>({
+    "&":"&amp;",
+    "<":"&lt;",
+    ">":"&gt;",
+    '"':"&quot;",
+    "'":"&#039;"
+  }[m]));
+}
+
+window.addEventListener("firebase-ready",()=>{
+  if(window.firebaseReady()){
+    el("driverMessage").innerHTML=
+      "🟢 Firebase connected.<br>Save → Driver GPS LIVE → Passenger map LIVE.";
+  }
+});
+</script>
+
+</body>
+</html>
